@@ -43,6 +43,11 @@ namespace sqlpp
     Connection_pool* origin;
 
   public:
+    typedef Connection_config connection_config;
+    typedef Connection_validator connection_validator;
+    typedef Connection connection;
+    typedef Connection_pool connection_pool;
+
     pool_connection() : _impl(nullptr), origin(nullptr)
     {
     }

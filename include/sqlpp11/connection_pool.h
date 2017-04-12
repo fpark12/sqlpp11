@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2013 - 2017, Roland Bock, Frank Park
+* Copyright (c) 2013 - 2017, Roland Bock, Frank Park, Aaron Bishop
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without modification,
@@ -35,10 +35,13 @@
 #include <memory>
 #include <iostream>
 #include <chrono>
+#include <exception>
+#include <future>
 #include <type_traits>
 #include <sqlpp11/exception.h>
 #include <sqlpp11/pool_connection.h>
 #include <sqlpp11/bind.h>
+#include <sqlpp11/future.h>
 
 namespace sqlpp
 {
@@ -174,6 +177,20 @@ namespace sqlpp
     connection_pool_t& operator=(const connection_pool_t&) = delete;
     connection_pool_t& operator=(connection_pool_t&&) = delete;
 
+    typedef Connection_config connection_config_t;
+    typedef Connection_validator connection_validator_t;
+    typedef Connection connection_t;
+    typedef pool_connection<Connection_config,Connection_validator,Connection> pool_connection_t;
+
+    template<typename Query>
+    using query_result = sqlpp::query_future_result_t<connection_pool_t,Query>;
+
+    template<typename Query>
+    using query_promise = sqlpp::query_promise<connection_pool_t,Query>;
+
+    template<typename Query>
+    using query_future = sqlpp::query_future<connection_pool_t,Query>;
+
     auto get_connection()
       -> pool_connection<Connection_config, Connection_validator, Connection> 
     {
@@ -222,6 +239,21 @@ namespace sqlpp
     {
       operator()(query, []() {});
     }
+
+    template<typename Query>
+    static void execute_query_promise(query_promise<Query>& promise, connection_pool_t& pool, Query query)
+    {
+      try {
+        auto connection = pool.get_connection();
+        auto result = connection(query);
+        promise.set_value(std::move(query_result<Query>(std::move(connection), std::move(result))));
+      } catch(...) {
+        promise.set_exception(std::current_exception());
+      }
+    }
+
+    template<typename Query>
+    query_promise<Query> make_query_promise() { return query_promise<Query>(); }
   };
 
   template<typename Connection_config,
