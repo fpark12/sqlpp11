@@ -41,6 +41,11 @@ struct MockDbT : public sqlpp::connection
       ::sqlpp::make_traits<::sqlpp::no_value_t,
                            ::sqlpp::tag_if<::sqlpp::tag::enforce_null_result_treatment, enforceNullResultTreatment>>;
 
+  MockDbT() {}
+  
+  template<typename Config>
+  MockDbT(const Config&) {}
+
   struct _serializer_context_t
   {
     std::ostringstream _os;
@@ -248,5 +253,9 @@ struct MockDbT : public sqlpp::connection
 
 using MockDb = MockDbT<false>;
 using EnforceDb = MockDbT<true>;
+
+
+struct MockDbConfig { typedef MockDb connection; };
+struct EnforceDbConfig { typedef EnforceDb connection; };
 
 #endif

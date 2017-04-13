@@ -27,15 +27,18 @@
 #ifndef SQLPP_POOL_CONNECTION_H
 #define SQLPP_POOL_CONNECTION_H
 
-#include <sqlpp11/connection.h>
-#include <sqlpp11/connection_pool.h>
 #include <sqlpp11/type_traits.h>
 #include <memory>
 
 namespace sqlpp
 {
-  template <typename Connection_config, typename Connection_validator, typename Connection,
-    typename Connection_pool = connection_pool_t<Connection_config, Connection_validator, Connection>>
+  template <typename Connection_config,
+    typename Connection_validator,
+    typename Connection>
+  struct connection_pool_t;
+  
+    template <typename Connection_config, typename Connection_validator, typename Connection,
+    typename Connection_pool = connection_pool_t<Connection_config, Connection_validator, Connection> >
   struct pool_connection : public sqlpp::connection
   {
   private:
@@ -52,7 +55,7 @@ namespace sqlpp
     {
     }
 
-    pool_connection(std::unique_ptr<Connection>& connection, Connection_pool* origin) : _impl(std::move(connection)), origin(origin)
+    pool_connection(std::unique_ptr<Connection>&& connection, Connection_pool* origin) : _impl(std::move(connection)), origin(origin)
     {
     }
 
@@ -78,9 +81,9 @@ namespace sqlpp
     }
 
     template <typename T>
-    auto operator()(const T& t) -> decltype(_impl->run(t))
+    auto operator()(const T& t) -> decltype((*_impl)(t))
     {
-      return _impl->run(t);
+      return (*_impl)(t);
     }
 
     template <typename T>

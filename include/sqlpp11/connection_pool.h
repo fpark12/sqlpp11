@@ -66,10 +66,9 @@ namespace sqlpp
       }
 
       template<typename Connection>
-      void deregister(Connection* connection) {}
+      void deregister(Connection*) {}
     };
 
-    using namespace std::chrono_literals;
     class periodic
     {
     private:
@@ -77,7 +76,7 @@ namespace sqlpp
       std::unordered_map<void*, std::chrono::time_point<std::chrono::system_clock>> last_checked;
 
     public:
-      periodic(const std::chrono::seconds r = 28800s) //default wait_timeout in MySQL
+      periodic(const std::chrono::seconds r = std::chrono::seconds(28800)) //default wait_timeout in MySQL
         : revalidate_interval(r), last_checked() {}
 
       template<typename Connection>
@@ -133,7 +132,7 @@ namespace sqlpp
 
   template <typename Connection_config,
     typename Connection_validator = connection_validator::automatic,
-    typename Connection = typename std::enable_if<std::is_class<Connection_config::connection>::value, Connection_config::connection>::type>
+    typename Connection = typename std::enable_if<std::is_class<typename Connection_config::connection>::value, typename Connection_config::connection>::type>
   class connection_pool_t
   {
     friend pool_connection<Connection_config, Connection_validator, Connection>;
@@ -183,16 +182,15 @@ namespace sqlpp
     typedef pool_connection<Connection_config,Connection_validator,Connection> pool_connection_t;
 
     template<typename Query>
-    using query_result = sqlpp::query_future_result_t<connection_pool_t,Query>;
+    using query_result = sqlpp::query_future_result<pool_connection_t,Query>;
 
     template<typename Query>
-    using query_promise = sqlpp::query_promise<connection_pool_t,Query>;
+    using query_promise = sqlpp::query_promise<pool_connection_t,Query>;
 
     template<typename Query>
-    using query_future = sqlpp::query_future<connection_pool_t,Query>;
+    using query_future = sqlpp::query_future<pool_connection_t,Query>;
 
-    auto get_connection()
-      -> pool_connection<Connection_config, Connection_validator, Connection> 
+    pool_connection_t get_connection()
     {
       std::lock_guard<std::mutex> lock(connection_pool_mutex);
       while (true)
@@ -205,7 +203,7 @@ namespace sqlpp
             free_connections.pop();
             connection_validator.validate(connection.get());
 
-            return pool_connection<Connection_config, Connection_validator, Connection>(std::move(connection), this);
+            return pool_connection_t(std::move(connection), this);
           }
           else
           {
@@ -220,7 +218,7 @@ namespace sqlpp
 
       try
       {
-        return pool_connection<Connection_config, Connection_validator, Connection>(std::move(std::make_unique<Connection>(config)), this);
+        return pool_connection<Connection_config, Connection_validator, Connection>(std::move(std::unique_ptr<Connection>(new Connection(config))), this);
       }
       catch (const sqlpp::exception&)
       {
@@ -235,13 +233,9 @@ namespace sqlpp
     }
 
     template<typename Query>
-    void operator()(Query query)
-    {
-      operator()(query, []() {});
-    }
 
     template<typename Query>
-    static void execute_query_promise(query_promise<Query>& promise, connection_pool_t& pool, Query query)
+    static void execute_query_promise(query_promise<Query>&& promise, connection_pool_t& pool, Query query)
     {
       try {
         auto connection = pool.get_connection();
@@ -253,12 +247,26 @@ namespace sqlpp
     }
 
     template<typename Query>
-    query_promise<Query> make_query_promise() { return query_promise<Query>(); }
+    static query_result<Query> execute_query(connection_pool_t& pool, Query query)
+    {
+      auto connection = pool.get_connection();
+      auto result = connection(query);
+      return query_result<Query>(std::move(connection), std::move(result));
+    }
+    
+    template<typename Query>
+    query_future<Query> operator()(Query query, std::launch policy=std::launch::async)
+    {
+      return std::async(policy, execute_query<Query>, std::ref(*this), query);
+    }
+
+    template<typename Query>
+    static query_promise<Query> make_query_promise(const Query&) { return query_promise<Query>(); }
   };
 
   template<typename Connection_config,
     typename Connection_validator = connection_validator::automatic,
-    typename Connection = typename std::enable_if<std::is_class<Connection_config::connection>::value, Connection_config::connection>::type>
+    typename Connection = typename std::enable_if<std::is_class<typename Connection_config::connection>::value, typename Connection_config::connection>::type>
   auto connection_pool(const std::shared_ptr<Connection_config>& config, size_t max_pool_size)
     -> connection_pool_t<Connection_config, Connection_validator, Connection>
   {

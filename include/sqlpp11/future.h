@@ -33,16 +33,9 @@
 #include <future>
 
 namespace sqlpp {
-  template<typename Connection, typename Query, typename Result =
-#if __cplusplus > 201402L
-    std::invoke_result<Connection(Query)>
-#else
-    std::result_of<Connection(Query)>
-#endif
-  >
+  template<typename Connection, typename Result>
   struct query_future_result_t {
     typedef Connection connection_t;
-    typedef Query query_t;
     typedef Result result_t;
 
     connection_t connection;
@@ -53,11 +46,21 @@ namespace sqlpp {
     {}
   };
 
-  template<typename Connection, typename Query>
-  using query_future = std::future<query_future_result_t<Connection,Query> >;
+  template<typename Connection, typename Query, typename Result
+#if __cplusplus > 201402L
+    = typename std::invoke_result<Connection(Query)>::type
+#elif __cplusplus >= 201103L
+    = typename std::result_of<Connection(Query)>::type
+#endif
+  >
+  using query_future_result = query_future_result_t<Connection,Result>;
 
   template<typename Connection, typename Query>
-  using query_promise = std::promise<query_future_result_t<Connection,Query> >;
+  using query_future = std::future<query_future_result<Connection,Query> >;
+
+  template<typename Connection, typename Query>
+  using query_promise = std::promise<query_future_result<Connection,Query> >;
+
 }
 
 #endif

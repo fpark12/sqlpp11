@@ -45,11 +45,18 @@ set(test_names
   Result
   Union
   With
+  Async
   )
 
 create_test_sourcelist(test_sources test_main.cpp ${test_names})
 add_executable(sqlpp11_tests ${test_sources})
-target_link_libraries(sqlpp11_tests PRIVATE sqlpp11 sqlpp11_testing)
+
+if(UNIX)
+set(STD_THREAD_LIBS pthread)
+endif()
+
+target_link_libraries(sqlpp11_tests PRIVATE sqlpp11 sqlpp11_testing ${STD_THREAD_LIBS})
+
 
 foreach(test IN LISTS test_names)
   add_test(NAME sqlpp11.tests.${test}
