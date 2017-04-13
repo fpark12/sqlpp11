@@ -28,7 +28,16 @@
 #include "MockDb.h"
 #include <sqlpp11/sqlpp11.h>
 #include <sqlpp11/connection_pool.h>
-
+#define TEST_ASIO
+#ifdef TEST_ASIO
+#include <asio.hpp>
+#include <sqlpp11/boost_async.h>
+using asio::io_service;
+#elif defined(TEST_BOOST_ASIO)
+#include <boost/asio.hpp>
+#include <sqlpp11/boost_async.h>
+using boost::asio::io_service;
+#endif
 int Async(int, char *[])
 {
   auto config = std::make_shared<MockDbConfig>();
@@ -64,6 +73,20 @@ int Async(int, char *[])
         std::cout << row.beta << ' ' << row.gamma << '\n';
       }
     }
+#if defined(TEST_ASIO) || defined(TEST_BOOST_ASIO)
+    {
+      io_service io;
+      io_service::work work(io);
+      std::thread t([&io](){io.run();});
+      auto future = sqlpp::io_runner_t<io_service>::async(io, pool, query);
+      auto result = future.get();
+      for(const auto& row : result.result) {
+        std::cout << row.beta << ' ' << row.gamma << '\n';
+      }
+      io.stop();
+      t.join();
+    }
+#endif
     return 0;
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';

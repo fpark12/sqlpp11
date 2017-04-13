@@ -182,7 +182,7 @@ namespace sqlpp
     typedef pool_connection<Connection_config,Connection_validator,Connection> pool_connection_t;
 
     template<typename Query>
-    using query_result = sqlpp::query_future_result<pool_connection_t,Query>;
+    using query_result = sqlpp::query_result<pool_connection_t,Query>;
 
     template<typename Query>
     using query_promise = sqlpp::query_promise<pool_connection_t,Query>;
@@ -255,7 +255,7 @@ namespace sqlpp
     }
     
     template<typename Query>
-    query_future<Query> operator()(Query query, std::launch policy=std::launch::async)
+    query_future<Query> operator()(Query query, std::launch policy=std::launch::async|std::launch::deferred)
     {
       return std::async(policy, execute_query<Query>, std::ref(*this), query);
     }

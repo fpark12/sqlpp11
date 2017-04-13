@@ -24,43 +24,45 @@
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#pragma once
+#ifndef SQLPP_BOOST_ASYNC_H
+#define SQLPP_BOOST_ASYNC_H
 
-#ifndef SQLPP_FUTURE_H
-#define SQLPP_FUTURE_H
+#include <sqlpp11/connection_pool.h>
+#include <memory>
 
-#include <exception>
-#include <future>
+namespace boost { namespace asio { class io_service; } }
 
-namespace sqlpp {
-  template<typename Connection, typename Result>
-  struct query_result_t {
-    typedef Connection connection_t;
-    typedef Result result_t;
+namespace asio { class io_service; }
 
-    connection_t connection;
-    result_t result;
-
-    query_result_t(connection_t&& con, result_t&& res)
-      : connection(std::move(con)), result(std::move(res))
-    {}
+namespace sqlpp
+{
+  template<typename IO_Service>
+  class io_runner_t {
+  public:
+    template<
+      typename Connection_pool,
+      typename Query
+    >
+    static auto async(IO_Service& service, Connection_pool& pool, Query query)
+      -> query_future<typename Connection_pool::pool_connection_t,Query>
+    {  
+      typedef query_result<typename Connection_pool::pool_connection_t,Query> result_t;
+      auto promise = std::make_shared<std::promise<result_t> >();
+      service.post([promise,&pool,query](){
+        try{
+          auto connection = pool.get_connection();
+          auto result = connection(query);
+          promise->set_value(std::move(result_t(std::move(connection), std::move(result))));
+        }catch(...){
+          promise->set_exception(std::current_exception());
+        }
+      });
+      return promise->get_future();
+    }
   };
-
-  template<typename Connection, typename Query, typename Result
-#if __cplusplus > 201402L
-    = typename std::invoke_result<Connection(Query)>::type
-#elif __cplusplus >= 201103L
-    = typename std::result_of<Connection(Query)>::type
-#endif
-  >
-  using query_result = query_result_t<Connection,Result>;
-
-  template<typename Connection, typename Query>
-  using query_future = std::future<query_result<Connection,Query> >;
-
-  template<typename Connection, typename Query>
-  using query_promise = std::promise<query_result<Connection,Query> >;
-
+  
+  typedef io_runner_t<boost::asio::io_service> io_runner;
+  typedef io_runner_t<asio::io_service> asio_runner;
 }
 
 #endif
